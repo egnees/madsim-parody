@@ -1,24 +1,19 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, VecDeque},
-    rc::Weak,
-};
+use std::collections::{HashMap, VecDeque};
 
 use super::task::{Task, TaskId};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Default)]
-pub(crate) struct State {
+pub(crate) struct RuntimeState {
     task_queue: VecDeque<TaskId>,
     tasks: HashMap<TaskId, Task>,
 }
 
-impl State {
+impl RuntimeState {
     pub fn take_task(&mut self) -> Option<Task> {
         // some tasks from queue may be already resolved,
-        // (there can be duplicates in task queue
-        // or tasks can be cancelled)
+        // (there can be duplicates in task queue)
         while let Some(task_id) = self.task_queue.pop_front() {
             if let Some(task) = self.tasks.remove(&task_id) {
                 return Some(task);

@@ -2,12 +2,12 @@ use std::{cell::RefCell, rc::Weak, sync::Arc};
 
 use futures::task::ArcWake;
 
-use super::{state::State, task::TaskId};
+use super::{state::RuntimeState, task::TaskId};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct Waker {
-    pub state: Weak<RefCell<State>>,
+    pub state: Weak<RefCell<RuntimeState>>,
     pub task_id: TaskId,
 }
 

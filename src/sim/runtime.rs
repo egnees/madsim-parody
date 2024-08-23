@@ -10,7 +10,7 @@ use std::{
 use futures::FutureExt;
 use thiserror::Error;
 
-use state::State;
+use state::RuntimeState;
 use waker::Waker;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,7 +26,7 @@ mod tests;
 
 #[derive(Default)]
 pub(crate) struct Runtime {
-    state: Rc<RefCell<State>>,
+    state: Rc<RefCell<RuntimeState>>,
 }
 
 impl Runtime {
