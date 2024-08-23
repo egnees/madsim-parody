@@ -15,10 +15,6 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
     pub fn take_task(&mut self) -> Option<Task> {
         // some tasks from queue may be already resolved,
         // (there can be duplicates in task queue

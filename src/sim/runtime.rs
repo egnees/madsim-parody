@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     future::Future,
-    marker::PhantomData,
     pin::Pin,
     rc::Rc,
     sync::Arc,
@@ -28,8 +27,6 @@ mod tests;
 #[derive(Default)]
 pub(crate) struct Runtime {
     state: Rc<RefCell<State>>,
-    // make sure runtime is !Sync + !Send
-    _phantom: PhantomData<Rc<()>>,
 }
 
 impl Runtime {
@@ -95,7 +92,7 @@ impl Runtime {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 #[error("the task has been dropped")]
 pub struct JoinError {}
 
