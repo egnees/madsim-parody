@@ -58,6 +58,7 @@ impl Runtime {
         true
     }
 
+    #[allow(unused)]
     pub fn make_steps(&self, steps: Option<usize>) -> usize {
         let mut cnt = 0;
         if let Some(steps) = steps {

@@ -116,7 +116,7 @@ pub async fn sleep(duration: Duration) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn now() -> Timestamp {
+pub fn now() -> Duration {
     NodeHandle::current().time()
 }
 
@@ -125,25 +125,23 @@ pub fn now() -> Timestamp {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::{Cell, RefCell},
-        future::{poll_fn, Future},
-        pin::pin,
+        cell::RefCell,
         rc::Rc,
         sync::{atomic::AtomicUsize, Arc},
-        task::Poll,
         time::Duration,
     };
 
     use futures::task::{waker, ArcWake};
 
     use crate::sim::{
-        self,
         node::NodeBuilder,
         spawn,
         time::{now, sleep},
     };
 
     use super::TimeDriver;
+
+    ////////////////////////////////////////////////////////////////////////////////
 
     #[test]
     fn driver_works() {
@@ -200,6 +198,8 @@ mod tests {
             1
         );
     }
+
+    ////////////////////////////////////////////////////////////////////////////////
 
     #[test]
     fn time_works() {
