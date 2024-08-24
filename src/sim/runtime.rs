@@ -8,6 +8,7 @@ use std::{
 };
 
 use futures::FutureExt;
+use task::Task;
 use thiserror::Error;
 
 use state::RuntimeState;
@@ -32,6 +33,10 @@ pub(crate) struct Runtime {
 impl Runtime {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn has_work(&self) -> bool {
+        self.state.borrow().queue_size() > 0
     }
 
     pub fn next_step(&self) -> bool {
@@ -86,7 +91,11 @@ impl Runtime {
     }
 
     fn submit(&self, task: impl Future<Output = ()> + 'static) {
-        self.state.borrow_mut().add_task(task.into())
+        let task: Task = task.into();
+        let mut state = self.state.borrow_mut();
+        let id = task.id();
+        state.add_task(task);
+        state.push_task(id);
     }
 }
 

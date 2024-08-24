@@ -3,6 +3,7 @@ use std::rc::Rc;
 ////////////////////////////////////////////////////////////////////////////////
 
 mod builder;
+mod guard;
 mod handle;
 mod state;
 
@@ -17,7 +18,7 @@ pub use handle::NodeHandle;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-pub struct Node(Rc<NodeState>);
+pub struct Node(pub(crate) Rc<NodeState>);
 
 impl Node {
     pub fn handle(&self) -> NodeHandle {

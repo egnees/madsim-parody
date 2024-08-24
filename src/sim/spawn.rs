@@ -1,13 +1,17 @@
 use std::future::Future;
 
-use super::{node, runtime::JoinHandle};
+use super::{node::NodeHandle, runtime::JoinHandle};
+
+////////////////////////////////////////////////////////////////////////////////
 
 pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
 where
     F: Future + 'static,
 {
-    node::NodeHandle::current().spawn(future)
+    NodeHandle::current().spawn(future)
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
@@ -57,9 +61,10 @@ mod tests {
             }
         });
 
-        assert_eq!(node1.handle().make_steps(None), 2);
-        assert_eq!(node2.handle().make_steps(None), 2);
+        node1.handle().make_steps(None);
+        assert_eq!(cnt.load(std::sync::atomic::Ordering::SeqCst), 1);
 
+        node2.handle().make_steps(None);
         assert_eq!(cnt.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 }

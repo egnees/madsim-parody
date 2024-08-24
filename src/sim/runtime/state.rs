@@ -26,10 +26,13 @@ impl RuntimeState {
         let id = task.id();
         let prev_task = self.tasks.insert(id, task);
         assert!(prev_task.is_none());
-        self.push_task(id)
     }
 
     pub fn push_task(&mut self, task_id: TaskId) {
         self.task_queue.push_back(task_id)
+    }
+
+    pub fn queue_size(&self) -> usize {
+        self.task_queue.len()
     }
 }
