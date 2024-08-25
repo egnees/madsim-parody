@@ -1,7 +1,8 @@
-pub mod node;
 mod runtime;
-pub mod spawn;
 mod time;
+
+pub mod node;
+pub mod spawn;
 
 use node::NodeHandle;
 

@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use std::{future::Future, rc::Weak, time::Duration};
 
-use crate::sim::{runtime::JoinHandle, time::Timestamp};
+use crate::{sim::runtime::JoinHandle, time::Timestamp};
 
 use super::{guard::ContextGuard, state::NodeState, Node};
 
@@ -34,7 +34,7 @@ impl NodeHandle {
         NODE_HANDLE.with(|h| *h.borrow_mut() = handle);
     }
 
-    pub(crate) fn get_state(&self) -> Node {
+    pub(crate) fn node(&self) -> Node {
         Node(self.0.upgrade().unwrap())
     }
 
@@ -42,12 +42,12 @@ impl NodeHandle {
     where
         F: Future + 'static,
     {
-        self.get_state().0.runtime.spawn(task)
+        self.node().0.runtime.spawn(task)
     }
 
     pub fn next_step(&self) -> bool {
         let _guard = ContextGuard::new(self.clone());
-        let state = self.get_state().0;
+        let state = self.node().0;
         let runtime_made_step = state.runtime.next_step();
         if runtime_made_step {
             true
@@ -74,11 +74,11 @@ impl NodeHandle {
     }
 
     pub fn time(&self) -> Timestamp {
-        self.get_state().0.time_handle.0.borrow().time()
+        self.node().0.time_handle.0.borrow().time()
     }
 
     fn next_event_timestamp(&self) -> Option<Timestamp> {
-        let state = self.get_state().0;
+        let state = self.node().0;
         if state.runtime.has_work() {
             Some(self.time())
         } else {
@@ -103,12 +103,7 @@ impl NodeHandle {
             }
         }
         assert!(self.time() <= until);
-        self.get_state()
-            .0
-            .time_handle
-            .0
-            .borrow_mut()
-            .advance_time(until);
+        self.node().0.time_handle.0.borrow_mut().advance_time(until);
         steps
     }
 }

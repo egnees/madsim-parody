@@ -5,11 +5,9 @@ use std::{
 
 use futures::task::AtomicWaker;
 
+use crate::time::Timestamp;
+
 use super::node::NodeHandle;
-
-////////////////////////////////////////////////////////////////////////////////
-
-pub(crate) type Timestamp = Duration;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -97,7 +95,7 @@ pub(crate) struct TimeHandle(pub Rc<RefCell<TimeDriver>>);
 ////////////////////////////////////////////////////////////////////////////////
 
 pub async fn sleep(duration: Duration) {
-    let time_handle = &NodeHandle::current().get_state().0.time_handle;
+    let time_handle = &NodeHandle::current().node().0.time_handle;
     let timer_entry = {
         let mut handle = time_handle.0.borrow_mut();
         let timestamp = handle.time() + duration;
@@ -127,7 +125,10 @@ mod tests {
     use std::{
         cell::RefCell,
         rc::Rc,
-        sync::{atomic::AtomicUsize, Arc},
+        sync::{
+            atomic::{AtomicBool, AtomicUsize},
+            Arc,
+        },
         time::Duration,
     };
 
@@ -288,5 +289,23 @@ mod tests {
             assert_eq!(now(), Duration::from_secs(2));
         });
         handle.make_steps(None);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn sleep_zero() {
+        let node = NodeBuilder::new().build();
+        let handle = node.handle();
+        let flag = Rc::new(AtomicBool::new(false));
+        handle.spawn({
+            let flag = flag.clone();
+            async move {
+                sleep(Duration::from_secs(0)).await;
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        });
+        handle.step_duration(Duration::from_secs(0));
+        assert_eq!(flag.load(std::sync::atomic::Ordering::SeqCst), true);
     }
 }
