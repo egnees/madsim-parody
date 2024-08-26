@@ -32,6 +32,9 @@ impl UdpSocket {
         let net = node.network_handle();
 
         for addr in addr.to_socket_addrs()? {
+            if addr.ip() != node.ip() {
+                continue;
+            }
             let socket = Rc::new(RefCell::new(UpdSocketData {
                 recv_buf: Buffer::with_capacity(info.udp_recv_buffer_size),
                 recv_waiters: Vec::new(),
@@ -101,11 +104,12 @@ unsafe impl Sync for UdpSocket {}
 
 #[cfg(test)]
 mod tests {
-    use std::{rc::Rc, sync::atomic::AtomicBool};
+    use std::{net::SocketAddr, rc::Rc, sync::atomic::AtomicBool};
 
     use crate::{
         net::socket_addr::ToSocketAddrs,
         sim::{node::NodeBuilder, Sim},
+        time::Timestamp,
     };
 
     use super::UdpSocket;
@@ -147,5 +151,31 @@ mod tests {
         node2.make_steps(None);
         node1.make_steps(None);
         assert_eq!(flag.load(std::sync::atomic::Ordering::SeqCst), true);
+    }
+
+    #[test]
+    fn looped() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::from_ip_addr("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        let flag = Rc::new(AtomicBool::new(false));
+        node.spawn({
+            let flag = flag.clone();
+            async move {
+                let socket = UdpSocket::bind("10.12.1.1:80").unwrap();
+                socket.send_to(b"hello", "10.12.1.1:80").unwrap();
+                let mut buf = [0u8; 5];
+                let (len, from) = socket.recv_from(&mut buf).await;
+                assert_eq!(len, 5);
+                assert_eq!(&buf, b"hello");
+                assert_eq!(from, "10.12.1.1:80".parse::<SocketAddr>().unwrap());
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        });
+        sim.make_steps();
+        assert_eq!(flag.load(std::sync::atomic::Ordering::SeqCst), true);
+        assert_eq!(node.time(), Timestamp::from_secs(0));
     }
 }
