@@ -7,7 +7,7 @@ use super::{state::RuntimeState, task::TaskId};
 ////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct Waker {
-    pub state: Weak<RefCell<RuntimeState>>,
+    pub handle: Weak<RefCell<RuntimeState>>,
     pub task_id: TaskId,
 }
 
@@ -17,7 +17,7 @@ unsafe impl Sync for Waker {}
 
 impl ArcWake for Waker {
     fn wake_by_ref(arc_self: &Arc<Self>) {
-        let Some(state) = arc_self.state.upgrade() else {
+        let Some(state) = arc_self.handle.upgrade() else {
             return;
         };
         state.borrow_mut().push_task(arc_self.task_id);

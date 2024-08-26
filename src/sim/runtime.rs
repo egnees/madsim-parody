@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     future::Future,
     pin::Pin,
     rc::Rc,
@@ -20,39 +20,38 @@ mod state;
 mod task;
 mod waker;
 
-#[cfg(test)]
-mod tests;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Default)]
-pub(crate) struct Runtime {
-    state: Rc<RefCell<RuntimeState>>,
-}
+pub(crate) struct Runtime(Rc<RefCell<RuntimeState>>);
 
 impl Runtime {
     pub fn new() -> Self {
         Default::default()
     }
 
+    fn state(&self) -> RefMut<'_, RuntimeState> {
+        self.0.borrow_mut()
+    }
+
     pub fn has_work(&self) -> bool {
-        self.state.borrow().queue_size() > 0
+        self.0.borrow().queue_size() > 0
     }
 
     pub fn next_step(&self) -> bool {
-        let Some(mut task) = self.state.borrow_mut().take_task() else {
+        let Some(mut task) = self.state().take_task() else {
             return false;
         };
 
         let waker = futures::task::waker(Arc::new(Waker {
-            state: Rc::downgrade(&self.state),
+            handle: Rc::downgrade(&self.0),
             task_id: task.id(),
         }));
 
         let mut context = Context::from_waker(&waker);
 
         if task.poll(&mut context).is_pending() {
-            self.state.borrow_mut().add_task(task);
+            self.state().add_task(task);
         }
 
         true
@@ -84,7 +83,7 @@ impl Runtime {
         let task = async move {
             let result = task.await;
             // if send failed, then join handle has been dropped,
-            // which is normal behaviour
+            // which is okay behaviour
             let _ = sender.send(result);
         };
         self.submit(task);
@@ -93,7 +92,7 @@ impl Runtime {
 
     fn submit(&self, task: impl Future<Output = ()> + 'static) {
         let task: Task = task.into();
-        let mut state = self.state.borrow_mut();
+        let mut state = self.state();
         let id = task.id();
         state.add_task(task);
         state.push_task(id);
@@ -120,3 +119,8 @@ impl<T> Future for JoinHandle<T> {
             .map_err(|_| JoinError {})
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(test)]
+mod tests;

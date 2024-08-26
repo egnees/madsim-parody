@@ -126,10 +126,10 @@ impl ToSocketAddrs for String {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl<'a> ToSocketAddrs for &'a [SocketAddr] {
-    type Iter = std::iter::Cloned<std::slice::Iter<'a, SocketAddr>>;
+    type Iter = vec::IntoIter<SocketAddr>;
 
     fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
-        Ok(self.iter().cloned())
+        Ok(vec::Vec::from_iter(self.iter().cloned()).into_iter())
     }
 }
 

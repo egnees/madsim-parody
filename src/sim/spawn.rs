@@ -17,33 +17,42 @@ where
 mod tests {
     use std::sync::{atomic::AtomicUsize, Arc};
 
-    use crate::sim::node::NodeBuilder;
+    use crate::sim::{node::builder::NodeBuilder, Sim};
 
     use super::spawn;
 
     #[test]
     fn basic() {
-        let node = NodeBuilder::new().build();
-        let handle = node.handle().spawn(async { 5 });
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::from_ip_addr("1.1.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
         let (sender, receiver) = std::sync::mpsc::channel();
-        node.handle().spawn(async move {
-            let result = spawn(async { 10 }).await.unwrap();
-            let x = result + handle.await.unwrap();
+        node.spawn(async move {
+            let x = spawn(async { 10 }).await.unwrap();
             sender.send(x).unwrap();
         });
-        node.handle().make_steps(None);
+        node.make_steps(None);
         let result = receiver.recv().unwrap();
-        assert_eq!(result, 15);
+        assert_eq!(result, 10);
     }
 
     #[test]
     fn node_alternation() {
-        let node1 = NodeBuilder::new().build();
-        let node2 = NodeBuilder::new().build();
+        let mut sim = Sim::new(123);
+        let node1 = NodeBuilder::from_ip_addr("1.1.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        let node2 = NodeBuilder::from_ip_addr("1.1.1.2")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
 
         let cnt = Arc::new(AtomicUsize::new(0));
 
-        node1.handle().spawn({
+        node1.spawn({
             let cnt = cnt.clone();
             async move {
                 spawn(async move {
@@ -52,7 +61,7 @@ mod tests {
             }
         });
 
-        node2.handle().spawn({
+        node2.spawn({
             let cnt = cnt.clone();
             async move {
                 spawn(async move {
@@ -61,10 +70,10 @@ mod tests {
             }
         });
 
-        node1.handle().make_steps(None);
+        node1.make_steps(None);
         assert_eq!(cnt.load(std::sync::atomic::Ordering::SeqCst), 1);
 
-        node2.handle().make_steps(None);
+        node2.make_steps(None);
         assert_eq!(cnt.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 }

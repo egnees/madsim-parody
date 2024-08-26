@@ -1,6 +1,8 @@
-use super::NodeHandle;
+use super::node::NodeHandle;
 
-pub(crate) struct ContextGuard {}
+////////////////////////////////////////////////////////////////////////////////
+
+pub struct ContextGuard {}
 
 impl ContextGuard {
     pub fn new(handle: NodeHandle) -> Self {
