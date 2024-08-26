@@ -72,10 +72,13 @@ pub struct NodeHandle(Weak<NodeState>);
 impl NodeHandle {
     pub fn current() -> Self {
         NODE_HANDLE.with(|h| {
-            h.borrow()
-                .as_ref()
-                .expect("node handle can be obtained only within a simulation")
-                .clone()
+            let h = h.borrow().as_ref().cloned();
+            if let Some(h) = h {
+                h.clone()
+            } else {
+                eprintln!("here!");
+                panic!("node handle can be obtained only within a simulation")
+            }
         })
     }
 
@@ -108,13 +111,12 @@ impl NodeHandle {
         let runtime_made_step = state.runtime.next_step();
         if runtime_made_step {
             true
-        } else {
-            let Some(time) = self.next_event_timestamp() else {
-                return false;
-            };
+        } else if let Some(time) = self.next_event_timestamp() {
             state.network_handle.advance_to_time(time);
             state.time_driver.advance_to_time(time);
             true
+        } else {
+            false
         }
     }
 

@@ -121,8 +121,9 @@ impl NetworkHandle {
             return true;
         };
         // package dropped
+        let rand_num = state.rng.gen_range(0.0..1.0);
         if to_socket.borrow().local_addr != from_socket.borrow().local_addr
-            && state.rng.gen_range(0.0..1.0) < state.drop_rate
+            && rand_num < state.drop_rate
         {
             return true;
         }
@@ -136,7 +137,8 @@ impl NetworkHandle {
         // package not dropped
         let delay = UniformDuration::new(state.min_delay, state.max_delay)
             .sample(&mut state.rng)
-            .checked_mul(hops as u32).unwrap();
+            .checked_mul(hops as u32)
+            .unwrap();
         let timestamp = now() + delay;
         let event = NetworkEvent {
             timestamp,

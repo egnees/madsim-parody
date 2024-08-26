@@ -143,9 +143,7 @@ mod tests {
             let bytes = socket.send_to(b"hello", socket1).unwrap();
             assert_eq!(bytes, 5);
         });
-        node1.make_steps(None);
-        node2.make_steps(None);
-        node1.make_steps(None);
+        sim.make_steps();
         assert_eq!(flag.load(std::sync::atomic::Ordering::SeqCst), true);
     }
 }
