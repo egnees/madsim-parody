@@ -51,7 +51,7 @@ impl UdpSocket {
                     recv_waiters: Vec::new(),
                     local_addr: addr,
                 }));
-                if let Ok(()) = net.register_upd_socket(socket.clone()) {
+                if net.register_upd_socket(socket.clone()).is_ok() {
                     return Ok(Self {
                         data: socket,
                         owner_node: node,
@@ -60,10 +60,7 @@ impl UdpSocket {
             }
         }
 
-        Err(io::Error::new(
-            io::ErrorKind::AddrInUse,
-            "address already is use or no address provided",
-        ))
+        Err(io::Error::new(io::ErrorKind::InvalidInput, "bind failed"))
     }
 
     pub fn send_to(&self, buf: &[u8], target: impl ToSocketAddrs) -> io::Result<usize> {
