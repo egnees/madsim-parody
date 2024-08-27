@@ -147,7 +147,7 @@ mod tests {
 
     fn make_node() -> (Sim, NodeHandle) {
         let mut sim = Sim::new(123);
-        let node = NodeBuilder::from_ip_addr("1.1.1.1")
+        let node = NodeBuilder::with_ip("1.1.1.1")
             .unwrap()
             .build(&mut sim)
             .unwrap();

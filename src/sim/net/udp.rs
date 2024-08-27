@@ -23,6 +23,7 @@ pub struct UpdSocketData {
 
 pub struct UdpSocket {
     data: Rc<RefCell<UpdSocketData>>,
+    owner_node: NodeHandle,
 }
 
 impl UdpSocket {
@@ -31,9 +32,12 @@ impl UdpSocket {
         let info = node.info();
         let net = node.network_handle();
 
-        for addr in addr.to_socket_addrs()? {
-            if addr.ip() != node.ip() {
+        for mut addr in addr.to_socket_addrs()? {
+            if addr.ip().is_multicast() {
                 continue;
+            }
+            if addr.ip().is_unspecified() || addr.ip().is_loopback() {
+                addr.set_ip(node.ip());
             }
             let port = if addr.port() == 0 {
                 None
@@ -48,7 +52,10 @@ impl UdpSocket {
                     local_addr: addr,
                 }));
                 if let Ok(()) = net.register_upd_socket(socket.clone()) {
-                    return Ok(Self { data: socket });
+                    return Ok(Self {
+                        data: socket,
+                        owner_node: node,
+                    });
                 }
             }
         }
@@ -61,13 +68,22 @@ impl UdpSocket {
 
     pub fn send_to(&self, buf: &[u8], target: impl ToSocketAddrs) -> io::Result<usize> {
         let mut target = target.to_socket_addrs()?;
-        let Some(target) = target.next() else {
+        let Some(mut target) = target.next() else {
             return Err(io::Error::new(
                 io::ErrorKind::AddrNotAvailable,
                 "address is not available",
             ));
         };
-        let node = NodeHandle::current();
+        if target.ip().is_multicast() || target.ip().is_unspecified() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "multicast and unspecified IP not supported",
+            ));
+        }
+        if target.ip().is_loopback() {
+            target.set_ip(self.owner_node.ip());
+        }
+        let node = self.owner_node.clone();
         let info = node.info();
         let buf = &buf[..info.udp_send_buffer_size.min(buf.len())];
         node.network_handle()
@@ -99,12 +115,19 @@ impl UdpSocket {
 
 impl Drop for UdpSocket {
     fn drop(&mut self) {
-        let node = NodeHandle::current();
-        node.return_port(self.local_addr().port());
-        node.network_handle().deregister_socket(self.local_addr());
+        // udp socket can be dropped outside of sim
+        if self.owner_node.alive() {
+            self.owner_node.return_port(self.local_addr().port());
+            if self.owner_node.network_handle().alive() {
+                self.owner_node
+                    .network_handle()
+                    .deregister_socket(self.local_addr());
+            }
+        }
     }
 }
 
+// UdpSocket must be used only within the simulation
 unsafe impl Send for UdpSocket {}
 unsafe impl Sync for UdpSocket {}
 
@@ -112,6 +135,8 @@ unsafe impl Sync for UdpSocket {}
 
 #[cfg(test)]
 mod tests {
+    use test_case::test_case;
+
     use std::{cell::RefCell, net::SocketAddr, rc::Rc, sync::atomic::AtomicBool};
 
     use crate::{
@@ -129,14 +154,8 @@ mod tests {
         let ip2 = "10.12.1.2";
         let socket1 = "10.12.1.1:123";
         let socket2 = "10.12.1.2:345";
-        let node1 = NodeBuilder::from_ip_addr(ip1)
-            .unwrap()
-            .build(&mut sim)
-            .unwrap();
-        let node2 = NodeBuilder::from_ip_addr(ip2)
-            .unwrap()
-            .build(&mut sim)
-            .unwrap();
+        let node1 = NodeBuilder::with_ip(ip1).unwrap().build(&mut sim).unwrap();
+        let node2 = NodeBuilder::with_ip(ip2).unwrap().build(&mut sim).unwrap();
         let flag = Rc::new(AtomicBool::new(false));
         node1.spawn({
             let flag = flag.clone();
@@ -161,10 +180,13 @@ mod tests {
         assert_eq!(flag.load(std::sync::atomic::Ordering::SeqCst), true);
     }
 
-    #[test]
-    fn looped() {
+    #[test_case("10.12.1.1:80", "10.12.1.1:80")]
+    #[test_case("127.0.0.1:80", "10.12.1.1:80")]
+    #[test_case("127.0.0.1:80", "127.0.0.1:80")]
+    #[test_case("10.12.1.1:80", "127.0.0.1:80")]
+    fn looped(bind: &'static str, send_to: &'static str) {
         let mut sim = Sim::new(123);
-        let node = NodeBuilder::from_ip_addr("10.12.1.1")
+        let node = NodeBuilder::with_ip("10.12.1.1")
             .unwrap()
             .build(&mut sim)
             .unwrap();
@@ -172,8 +194,8 @@ mod tests {
         node.spawn({
             let flag = flag.clone();
             async move {
-                let socket = UdpSocket::bind("10.12.1.1:80").unwrap();
-                socket.send_to(b"hello", "10.12.1.1:80").unwrap();
+                let socket = UdpSocket::bind(bind).unwrap();
+                socket.send_to(b"hello", send_to).unwrap();
                 let mut buf = [0u8; 5];
                 let (len, from) = socket.recv_from(&mut buf).await;
                 assert_eq!(len, 5);
@@ -190,7 +212,7 @@ mod tests {
     #[test]
     fn bind_on_same_addr() {
         let mut sim = Sim::new(123);
-        let node = NodeBuilder::from_ip_addr("10.12.1.1")
+        let node = NodeBuilder::with_ip("10.12.1.1")
             .unwrap()
             .build(&mut sim)
             .unwrap();
@@ -206,7 +228,7 @@ mod tests {
     #[test]
     fn bind_on_other_ip() {
         let mut sim = Sim::new(123);
-        let node = NodeBuilder::from_ip_addr("10.12.1.2")
+        let node = NodeBuilder::with_ip("10.12.1.2")
             .unwrap()
             .build(&mut sim)
             .unwrap();
@@ -221,7 +243,7 @@ mod tests {
     #[test]
     fn auto_port_selection() {
         let mut sim = Sim::new(123);
-        let node = NodeBuilder::from_ip_addr("10.12.1.1")
+        let node = NodeBuilder::with_ip("10.12.1.1")
             .unwrap()
             .build(&mut sim)
             .unwrap();
@@ -256,6 +278,74 @@ mod tests {
                 assert_eq!(ports[i], (i + 1) as u16);
             }
         }
+        sim.make_steps();
+    }
+
+    #[test]
+    fn bind_on_zero() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::with_ip("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        node.spawn({
+            let node = node.clone();
+            async move {
+                let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+                assert!(socket.local_addr().port() != 0);
+                assert_eq!(socket.local_addr().ip(), node.ip());
+
+                let socket = UdpSocket::bind("0.0.0.0:123").unwrap();
+                assert_eq!(socket.local_addr().port(), 123);
+                assert_eq!(socket.local_addr().ip(), node.ip());
+            }
+        });
+        sim.make_steps();
+    }
+
+    #[test]
+    fn can_be_dropped_outside_sim() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::with_ip("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        let (send, recv) = std::sync::mpsc::channel();
+        node.spawn(async move {
+            let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+            send.send(socket).unwrap();
+        });
+        sim.make_steps();
+        let socket = recv.recv().unwrap();
+        drop(socket);
+    }
+
+    #[test]
+    fn multicast() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::with_ip("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        node.spawn(async {
+            let multicast = UdpSocket::bind("224.255.0.1");
+            assert!(multicast.is_err());
+        });
+        sim.make_steps();
+    }
+
+    #[test]
+    fn bad_send_to() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::with_ip("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        node.spawn(async {
+            let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+            assert!(socket.send_to(b"some message", "224.13.3.1:80").is_err());
+            assert!(socket.send_to(b"some message", "0.0.0.0:80").is_err());
+        });
         sim.make_steps();
     }
 }

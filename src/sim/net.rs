@@ -206,7 +206,14 @@ impl NetworkHandle {
 
     ////////////////////////////////////////////////////////////////////////////////
 
+    pub(crate) fn alive(&self) -> bool {
+        self.0.strong_count() > 0
+    }
+
     fn state(&self) -> Rc<RefCell<NetworkState>> {
         self.0.upgrade().unwrap()
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -24,7 +24,7 @@ mod tests {
     #[test]
     fn basic() {
         let mut sim = Sim::new(123);
-        let node = NodeBuilder::from_ip_addr("1.1.1.1")
+        let node = NodeBuilder::with_ip("1.1.1.1")
             .unwrap()
             .build(&mut sim)
             .unwrap();
@@ -41,11 +41,11 @@ mod tests {
     #[test]
     fn node_alternation() {
         let mut sim = Sim::new(123);
-        let node1 = NodeBuilder::from_ip_addr("1.1.1.1")
+        let node1 = NodeBuilder::with_ip("1.1.1.1")
             .unwrap()
             .build(&mut sim)
             .unwrap();
-        let node2 = NodeBuilder::from_ip_addr("1.1.1.2")
+        let node2 = NodeBuilder::with_ip("1.1.1.2")
             .unwrap()
             .build(&mut sim)
             .unwrap();

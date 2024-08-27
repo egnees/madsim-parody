@@ -10,7 +10,6 @@ use std::{
     net::IpAddr,
     rc::{Rc, Weak},
     time::Duration,
-    u16,
 };
 
 use crate::{sim::runtime::JoinHandle, time::Timestamp};
@@ -54,8 +53,8 @@ impl NodeState {
 pub struct Node(Rc<NodeState>);
 
 impl Node {
-    const UPD_RECV_BUF_SIZE: usize = 4096;
-    const UPD_SEND_BUF_SIZE: usize = 4096;
+    const UDP_RECV_BUF_SIZE: usize = 4096;
+    const UDP_SEND_BUF_SIZE: usize = 4096;
 
     pub fn handle(&self) -> NodeHandle {
         NodeHandle(Rc::downgrade(&self.0))
@@ -75,15 +74,7 @@ pub struct NodeHandle(Weak<NodeState>);
 
 impl NodeHandle {
     pub fn current() -> Self {
-        NODE_HANDLE.with(|h| {
-            let h = h.borrow().as_ref().cloned();
-            if let Some(h) = h {
-                h.clone()
-            } else {
-                eprintln!("here!");
-                panic!("node handle can be obtained only within a simulation")
-            }
-        })
+        Self::get_current().unwrap()
     }
 
     pub(crate) fn exists() -> bool {
@@ -186,6 +177,10 @@ impl NodeHandle {
         assert!(not_existed);
     }
 
+    pub(crate) fn get_current() -> Option<NodeHandle> {
+        NODE_HANDLE.with(|h| h.borrow().as_ref().cloned())
+    }
+
     ////////////////////////////////////////////////////////////////////////////////
 
     pub(crate) fn add_timer(&self, duration: Duration) -> Rc<TimerEntry> {
@@ -214,6 +209,10 @@ impl NodeHandle {
     }
 
     ////////////////////////////////////////////////////////////////////////////////
+
+    pub(crate) fn alive(&self) -> bool {
+        self.0.strong_count() > 0
+    }
 
     fn state(&self) -> Rc<NodeState> {
         self.0.upgrade().unwrap()
