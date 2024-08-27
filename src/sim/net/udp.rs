@@ -178,4 +178,35 @@ mod tests {
         assert_eq!(flag.load(std::sync::atomic::Ordering::SeqCst), true);
         assert_eq!(node.time(), Timestamp::from_secs(0));
     }
+
+    #[test]
+    fn bind_on_same_addr() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::from_ip_addr("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        node.spawn(async {
+            let _socket1 = UdpSocket::bind("10.12.1.1:80").unwrap();
+            let try_bind2 = UdpSocket::bind("10.12.1.1:80");
+            assert!(try_bind2.is_err());
+        });
+        let steps = sim.make_steps();
+        assert!(steps >= 1);
+    }
+
+    #[test]
+    fn bind_on_other_ip() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::from_ip_addr("10.12.1.2")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        node.spawn(async {
+            let try_bind = UdpSocket::bind("10.12.1.1");
+            assert!(try_bind.is_err());
+        });
+        let steps = sim.make_steps();
+        assert!(steps >= 1);
+    }
 }
