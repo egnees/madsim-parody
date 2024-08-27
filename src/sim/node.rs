@@ -5,10 +5,12 @@ mod info;
 
 use core::cell::RefCell;
 use std::{
+    collections::BTreeSet,
     future::Future,
     net::IpAddr,
     rc::{Rc, Weak},
     time::Duration,
+    u16,
 };
 
 use crate::{sim::runtime::JoinHandle, time::Timestamp};
@@ -32,6 +34,7 @@ struct NodeState {
     time_driver: TimeDriver,
     network_handle: NetworkHandle,
     info: NodeInfo,
+    free_ports: RefCell<BTreeSet<u16>>,
 }
 
 impl NodeState {
@@ -41,6 +44,7 @@ impl NodeState {
             time_driver: TimeDriver::new(),
             network_handle,
             info,
+            free_ports: RefCell::new(BTreeSet::from_iter(1..=u16::MAX)),
         }
     }
 }
@@ -169,6 +173,19 @@ impl NodeHandle {
         self.state().info.clone()
     }
 
+    pub(crate) fn take_port(&self, port: Option<u16>) -> Option<u16> {
+        if let Some(port) = port {
+            self.state().free_ports.borrow_mut().take(&port)
+        } else {
+            self.state().free_ports.borrow_mut().pop_first()
+        }
+    }
+
+    pub(crate) fn return_port(&self, port: u16) {
+        let not_existed = self.state().free_ports.borrow_mut().insert(port);
+        assert!(not_existed);
+    }
+
     ////////////////////////////////////////////////////////////////////////////////
 
     pub(crate) fn add_timer(&self, duration: Duration) -> Rc<TimerEntry> {
@@ -200,5 +217,32 @@ impl NodeHandle {
 
     fn state(&self) -> Rc<NodeState> {
         self.0.upgrade().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeSet, net::IpAddr};
+
+    use crate::sim::Sim;
+
+    use super::{info::NodeInfo, NodeState};
+
+    #[test]
+    fn free_ports() {
+        let sim = Sim::new(123);
+        let node_state = NodeState::new(
+            NodeInfo {
+                ip: "1.1.1.1".parse::<IpAddr>().unwrap(),
+                udp_send_buffer_size: 0,
+                udp_recv_buffer_size: 0,
+            },
+            sim.network(),
+        );
+        assert_eq!(node_state.free_ports.borrow().len(), u16::MAX.into());
+        assert_eq!(
+            *node_state.free_ports.borrow(),
+            BTreeSet::from_iter(1..=u16::MAX)
+        );
     }
 }

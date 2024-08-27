@@ -35,13 +35,21 @@ impl UdpSocket {
             if addr.ip() != node.ip() {
                 continue;
             }
-            let socket = Rc::new(RefCell::new(UpdSocketData {
-                recv_buf: Buffer::with_capacity(info.udp_recv_buffer_size),
-                recv_waiters: Vec::new(),
-                local_addr: addr,
-            }));
-            if let Ok(()) = net.register_upd_socket(socket.clone()) {
-                return Ok(Self { data: socket });
+            let port = if addr.port() == 0 {
+                None
+            } else {
+                Some(addr.port())
+            };
+            if let Some(port) = node.take_port(port) {
+                let addr = SocketAddr::new(addr.ip(), port);
+                let socket = Rc::new(RefCell::new(UpdSocketData {
+                    recv_buf: Buffer::with_capacity(info.udp_recv_buffer_size),
+                    recv_waiters: Vec::new(),
+                    local_addr: addr,
+                }));
+                if let Ok(()) = net.register_upd_socket(socket.clone()) {
+                    return Ok(Self { data: socket });
+                }
             }
         }
 
@@ -91,9 +99,9 @@ impl UdpSocket {
 
 impl Drop for UdpSocket {
     fn drop(&mut self) {
-        NodeHandle::current()
-            .network_handle()
-            .deregister_socket(self.local_addr());
+        let node = NodeHandle::current();
+        node.return_port(self.local_addr().port());
+        node.network_handle().deregister_socket(self.local_addr());
     }
 }
 
@@ -104,7 +112,7 @@ unsafe impl Sync for UdpSocket {}
 
 #[cfg(test)]
 mod tests {
-    use std::{net::SocketAddr, rc::Rc, sync::atomic::AtomicBool};
+    use std::{cell::RefCell, net::SocketAddr, rc::Rc, sync::atomic::AtomicBool};
 
     use crate::{
         net::socket_addr::ToSocketAddrs,
@@ -208,5 +216,46 @@ mod tests {
         });
         let steps = sim.make_steps();
         assert!(steps >= 1);
+    }
+
+    #[test]
+    fn auto_port_selection() {
+        let mut sim = Sim::new(123);
+        let node = NodeBuilder::from_ip_addr("10.12.1.1")
+            .unwrap()
+            .build(&mut sim)
+            .unwrap();
+        node.spawn(async {
+            let socket = UdpSocket::bind("10.12.1.1:0").unwrap();
+            assert!(socket.local_addr().port() != 0);
+        });
+        let steps = sim.make_steps();
+        assert!(steps >= 1);
+        let ports = Rc::new(RefCell::new(Vec::<u16>::new()));
+        let (sender, _recv) = tokio::sync::broadcast::channel::<bool>(1);
+        for _ in 1..=(u16::MAX as usize) + 100 {
+            node.spawn({
+                let mut recv = sender.subscribe();
+                let ports = ports.clone();
+                async move {
+                    let socket = UdpSocket::bind("10.12.1.1:0");
+                    if let Ok(socket) = &socket {
+                        ports.borrow_mut().push(socket.local_addr().port());
+                    }
+                    recv.recv().await.unwrap();
+                }
+            });
+        }
+        sim.make_steps();
+        sender.send(true).unwrap();
+        {
+            let mut ports = ports.borrow_mut();
+            ports.sort();
+            assert_eq!(ports.len(), u16::MAX.into());
+            for i in 0..ports.len() {
+                assert_eq!(ports[i], (i + 1) as u16);
+            }
+        }
+        sim.make_steps();
     }
 }
